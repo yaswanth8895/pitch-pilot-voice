@@ -30,6 +30,8 @@ export interface Env {
   REQUEST_TIMEOUT_MS?: string;
   // "true" → ask ElevenLabs to record the call (needs disclosure/consent).
   CALL_RECORDING_ENABLED?: string;
+  // Seconds to ring before giving up (ElevenLabs default 60). Optional.
+  RINGING_TIMEOUT_SECS?: string;
   // "true" → Stage-1 fake path (skip ElevenLabs, post a canned transcript).
   FAKE_CALL?: string;
 }
@@ -265,6 +267,10 @@ async function createElevenLabsCall(
     conversation_initiation_client_data: { dynamic_variables: dynamicVariables },
   };
   if (env.CALL_RECORDING_ENABLED === "true") payload.call_recording_enabled = true;
+  const ringSecs = Number(env.RINGING_TIMEOUT_SECS);
+  if (Number.isFinite(ringSecs) && ringSecs > 0) {
+    payload.telephony_call_config = { ringing_timeout_secs: ringSecs };
+  }
 
   const res = await fetchWithTimeout(
     `${trimSlash(base)}/v1/convai/twilio/outbound-call`,

@@ -5,11 +5,14 @@
  *   ELEVENLABS_API_KEY=sk_… node scripts/create-agent.mjs
  *
  * Optional env:
- *   AGENT_LLM       LLM id (default "gpt-4o"). Native OpenAI ids are accepted
- *                   directly (gpt-4o, gpt-4o-mini, gpt-5, gpt-5-mini, gpt-5.4-mini…).
- *                   Use "custom-llm" only to bring your own endpoint/key.
- *   AGENT_VOICE_ID  TTS voice (default George).
- *   AGENT_NAME      Agent name (default "PitchPilot Outbound").
+ *   AGENT_LLM         LLM id (default "gpt-4o"). Native OpenAI ids work directly
+ *                     (gpt-4o, gpt-4o-mini, gpt-5, gpt-5-mini, gpt-5.4-mini, gpt-5.5…).
+ *                     Use "custom-llm" only to bring your own endpoint/key.
+ *   AGENT_VOICE_ID    TTS voice (default George).
+ *   AGENT_NAME        Agent name (default "PitchPilot Outbound").
+ *   AGENT_MAX_TOKENS  Max LLM tokens per reply (default 150 — keep phone replies short).
+ *   AGENT_MAX_DURATION Max call seconds (default 300 — demo safety cap).
+ *   AGENT_GUARDRAILS  "false" to skip focus + prompt_injection guardrails.
  *   ELEVENLABS_API_BASE  Override API origin (default https://api.elevenlabs.io).
  *
  * The system prompt uses {{dynamic variables}} the Worker sends at call time:
@@ -25,6 +28,9 @@ const base = (process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").re
 const llm = process.env.AGENT_LLM || "gpt-4o";
 const voiceId = process.env.AGENT_VOICE_ID || "JBFqnCBsd6RMkjVDRZzb"; // George
 const name = process.env.AGENT_NAME || "PitchPilot Outbound";
+const maxTokens = Number(process.env.AGENT_MAX_TOKENS || 150);
+const maxDuration = Number(process.env.AGENT_MAX_DURATION || 300);
+const withGuardrails = process.env.AGENT_GUARDRAILS !== "false";
 
 const systemPrompt = `# Personality
 You are Pat, a concise, friendly AI sales assistant for {{company}}.
@@ -59,13 +65,27 @@ const body = {
         prompt: systemPrompt,
         llm,
         temperature: 0.5,
+        max_tokens: maxTokens, // keep phone replies short + fast
         // Recommended for outbound calling.
         built_in_tools: { end_call: {}, voicemail_detection: {} },
       },
     },
-    tts: { voice_id: voiceId },
+    // eleven_flash_v2_5 is the ~75ms low-latency model recommended for agents.
+    tts: { voice_id: voiceId, model_id: "eleven_flash_v2_5", optimize_streaming_latency: 3 },
+    conversation: { max_duration_seconds: maxDuration },
   },
 };
+
+if (withGuardrails) {
+  // Basic safety for a sales agent (all agents benefit from these two).
+  body.platform_settings = {
+    guardrails: {
+      version: "1",
+      focus: { is_enabled: true },
+      prompt_injection: { is_enabled: true },
+    },
+  };
+}
 
 const res = await fetch(`${base}/v1/convai/agents/create`, {
   method: "POST",
@@ -75,9 +95,10 @@ const res = await fetch(`${base}/v1/convai/agents/create`, {
 const data = await res.json().catch(() => ({}));
 if (!res.ok) {
   console.error(`Create failed (HTTP ${res.status}):`, JSON.stringify(data));
+  if (withGuardrails) console.error("Tip: retry with AGENT_GUARDRAILS=false if the guardrails schema is rejected.");
   process.exit(1);
 }
 
-console.log(`✓ Agent created (llm=${llm}, voice=${voiceId})`);
+console.log(`✓ Agent created (llm=${llm}, voice=${voiceId}, max_tokens=${maxTokens})`);
 console.log(`  agent_id: ${data.agent_id}`);
 console.log(`\nNext: wrangler secret put ELEVENLABS_AGENT_ID   # paste the id above`);

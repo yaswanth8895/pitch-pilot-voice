@@ -71,11 +71,12 @@ try {
     check("recording flag absent by default", sent.call_recording_enabled === undefined);
   }
 
-  // Recording opt-in passes through when enabled.
+  // Recording opt-in + ringing timeout pass through when set.
   {
-    const res = await startCall("lead_synthetic_1", { CALL_RECORDING_ENABLED: "true" });
+    const res = await startCall("lead_synthetic_1", { CALL_RECORDING_ENABLED: "true", RINGING_TIMEOUT_SECS: "25" });
     const sent = mock.received.elevenCalls.at(-1) || {};
     check("recording opt-in -> 202 and call_recording_enabled forwarded", res.status === 202 && sent.call_recording_enabled === true);
+    check("ringing_timeout_secs forwarded in telephony_call_config", sent.telephony_call_config?.ringing_timeout_secs === 25);
   }
 
   // Provider rejects the destination number -> 502.
