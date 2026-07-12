@@ -1,0 +1,15 @@
+{
+  // PitchPilot voice adapter — Cloudflare Worker.
+  // Secrets are set with `wrangler secret put <NAME>` (never committed).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pitch-pilot-voice",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    // Flip to "true" only for the Stage-1 contract test (no real ElevenLabs call).
+    "FAKE_CALL": "false"
+  }
+}

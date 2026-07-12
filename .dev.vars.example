@@ -1,0 +1,12 @@
+# Copy to `.dev.vars` for local `wrangler dev` (git-ignored). Values below are
+# safe local placeholders for the Stage-1 contract test against the mock.
+
+VOICE_SHARED_SECRET=dev-shared-secret
+CONVEX_SITE_URL=http://127.0.0.1:8788
+FAKE_CALL=true
+
+# Filled in only for Stage-2 real calls:
+ELEVENLABS_API_KEY=
+ELEVENLABS_AGENT_ID=
+ELEVENLABS_PHONE_NUMBER_ID=
+ELEVENLABS_WEBHOOK_SECRET=

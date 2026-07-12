@@ -1,0 +1,24 @@
+{
+  "name": "pitch-pilot-voice",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PitchPilot voice adapter — Cloudflare Worker between Convex and ElevenLabs (native Twilio).",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "mock": "node mock/convex-mock.mjs",
+    "test": "node test/roundtrip.mjs && node test/webhook.mjs",
+    "test:roundtrip": "node test/roundtrip.mjs",
+    "test:webhook": "node test/webhook.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260708.1",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.20.0"
+  }
+}
