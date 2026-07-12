@@ -45,6 +45,35 @@ Skip this if you use the default native `gpt-4o` (ElevenLabs runs + bills it).
 
 Run `npx wrangler login` once (browser auth).
 
+## Setting secrets safely (never paste in chat or a file)
+
+Worker secrets go into Cloudflare via a hidden prompt — the value is never typed
+as part of a command, written to a file, or shown on screen:
+
+```bash
+npx wrangler login                          # one-time
+npx wrangler secret put ELEVENLABS_API_KEY  # paste at the hidden prompt
+# repeat for each secret name in section A
+```
+
+`npm run agent:create` needs the key as a shell env var (not a Cloudflare
+secret). Set it silently so it stays out of shell history:
+
+```bash
+read -rs ELEVENLABS_API_KEY && export ELEVENLABS_API_KEY
+npm run agent:create
+```
+
+Rules:
+
+- Never paste a secret into chat, `.env.example`, `CREDENTIALS.md`, or any
+  committed file.
+- `.dev.vars` is git-ignored (safe locally), but the agent script reads
+  `process.env`, so use the `read -rs` method above.
+- Avoid inline `KEY=sk_… npm run …` — it lands in `~/.zsh_history`.
+- If a secret ever appears in chat or shell history, treat it as exposed and
+  rotate it.
+
 ---
 
 ### Summary: who supplies what
