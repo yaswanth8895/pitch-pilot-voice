@@ -63,24 +63,34 @@ curl -X POST http://127.0.0.1:8787/start-call \
 `/voice/completed` — this is the **Stage-1** contract test. Set `FAKE_CALL=false`
 for real calls.
 
-## ElevenLabs agent setup (one-time, dashboard) — for Stage 2
+## ElevenLabs agent setup — for Stage 2
 
-1. **Create a Conversational AI agent.**
-2. **LLM → Custom LLM = OpenAI:** set an OpenAI-compatible endpoint + a
-   tool-calling-capable model, and store the `OPENAI_API_KEY` as an ElevenLabs
-   secret. (The key lives in ElevenLabs, never in this repo.)
-3. **System prompt** references the dynamic variables the Worker sends:
-   ```
-   You are an AI sales assistant for {{company}} calling {{lead_name}}.
-   Product: {{product_summary}}
-   Strategy: {{strategy}}
-   Likely objections: {{objections}}
-   Goal: {{call_goal}}. Identify yourself as an AI assistant. Keep replies short.
-   ```
-4. **Phone number:** add a **native Twilio** outbound-capable number to the agent;
+**Fastest: provision the agent from code** (reproducible; uses the system prompt
+with the `{{dynamic variables}}` the Worker sends):
+
+```bash
+ELEVENLABS_API_KEY=sk_… npm run agent:create   # prints agent_id
+# optional: AGENT_LLM=gpt-4o AGENT_VOICE_ID=… AGENT_NAME=…
+```
+
+**LLM choice — native OpenAI is available directly.** Per the ElevenLabs model
+catalog, OpenAI models (`gpt-4o`, `gpt-4o-mini`, `gpt-5`, `gpt-5-mini`,
+`gpt-5.4-mini`, …) are selectable as the agent `llm` with **no Custom-LLM setup**
+— ElevenLabs runs and bills them. Use `AGENT_LLM=custom-llm` (+ a custom_llm
+endpoint/key) **only** if you want your own OpenAI account/billing or a model
+not in the catalog. For a low-latency phone call, `gpt-4o` is a good default.
+
+Then finish in the dashboard:
+1. **Phone number:** add a **native Twilio** outbound-capable number to the agent;
    note its `phone_number_id`.
-5. **Webhook:** enable `post_call_transcription` → `POST https://<worker-url>/webhooks/elevenlabs`;
+2. **Webhook:** enable `post_call_transcription` → `POST https://<worker-url>/webhooks/elevenlabs`;
    copy the signing secret into `ELEVENLABS_WEBHOOK_SECRET`.
+3. The script already enables the `end_call` and `voicemail_detection` built-in
+   tools (recommended for outbound).
+
+Prefer the dashboard instead? Create a Conversational AI agent, set the `llm`,
+paste the same `{{var}}` system prompt (`scripts/create-agent.mjs` has it), then
+do steps 1–2 above.
 
 ## Secrets & deploy
 

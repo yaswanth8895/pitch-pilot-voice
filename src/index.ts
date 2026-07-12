@@ -28,6 +28,8 @@ export interface Env {
   ELEVENLABS_API_BASE?: string;
   // Per-request outbound timeout in ms (default 12000).
   REQUEST_TIMEOUT_MS?: string;
+  // "true" → ask ElevenLabs to record the call (needs disclosure/consent).
+  CALL_RECORDING_ENABLED?: string;
   // "true" → Stage-1 fake path (skip ElevenLabs, post a canned transcript).
   FAKE_CALL?: string;
 }
@@ -254,6 +256,16 @@ async function createElevenLabsCall(
     throw new Error("ElevenLabs credentials are not configured");
   }
   const base = env.ELEVENLABS_API_BASE ?? DEFAULT_ELEVENLABS_BASE;
+  // Fields per ElevenLabs Agents docs (POST /v1/convai/twilio/outbound-call).
+  // Dynamic variables ride in conversation_initiation_client_data.
+  const payload: Record<string, unknown> = {
+    agent_id: env.ELEVENLABS_AGENT_ID,
+    agent_phone_number_id: env.ELEVENLABS_PHONE_NUMBER_ID,
+    to_number: toNumber,
+    conversation_initiation_client_data: { dynamic_variables: dynamicVariables },
+  };
+  if (env.CALL_RECORDING_ENABLED === "true") payload.call_recording_enabled = true;
+
   const res = await fetchWithTimeout(
     `${trimSlash(base)}/v1/convai/twilio/outbound-call`,
     {
@@ -262,12 +274,7 @@ async function createElevenLabsCall(
         "xi-api-key": env.ELEVENLABS_API_KEY,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        agent_id: env.ELEVENLABS_AGENT_ID,
-        agent_phone_number_id: env.ELEVENLABS_PHONE_NUMBER_ID,
-        to_number: toNumber,
-        conversation_initiation_client_data: { dynamic_variables: dynamicVariables },
-      }),
+      body: JSON.stringify(payload),
     },
     timeoutMs(env),
   );

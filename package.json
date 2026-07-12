@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "agent:create": "node scripts/create-agent.mjs",
     "typecheck": "tsc --noEmit",
     "mock": "node mock/convex-mock.mjs",
     "test": "node test/roundtrip.mjs && node test/webhook.mjs && node test/hardening.mjs",
