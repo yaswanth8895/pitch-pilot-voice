@@ -66,12 +66,14 @@ const body = {
         llm,
         temperature: 0.5,
         max_tokens: maxTokens, // keep phone replies short + fast
-        // Recommended for outbound calling.
-        built_in_tools: { end_call: {}, voicemail_detection: {} },
+        // NOTE: built-in tools (end_call, voicemail_detection) use a name/params
+        // schema the create endpoint validates strictly — configure them in the
+        // ElevenLabs dashboard after creation to avoid brittle inline schemas.
       },
     },
-    // eleven_flash_v2_5 is the ~75ms low-latency model recommended for agents.
-    tts: { voice_id: voiceId, model_id: "eleven_flash_v2_5", optimize_streaming_latency: 3 },
+    // English agents require the English flash/turbo v2 models. flash_v2 = ~75ms.
+    // Override with AGENT_TTS_MODEL (e.g. eleven_flash_v2_5) for multilingual.
+    tts: { voice_id: voiceId, model_id: process.env.AGENT_TTS_MODEL || "eleven_flash_v2", optimize_streaming_latency: 3 },
     conversation: { max_duration_seconds: maxDuration },
   },
 };
