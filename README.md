@@ -109,6 +109,9 @@ do steps 1–2 above.
 
 ## Secrets & deploy
 
+> **Going live?** [`GO-LIVE.md`](GO-LIVE.md) is the exact step-by-step sequence
+> for making the first real call once credentials are in hand.
+
 ```bash
 # One value per secret (never committed):
 wrangler secret put VOICE_SHARED_SECRET       # same value as Convex
