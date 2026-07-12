@@ -56,7 +56,7 @@ export default {
       return handleStartCall(request, env, ctx);
     }
     if (method === "POST" && path === "/webhooks/elevenlabs") {
-      return handleElevenLabsWebhook(request, env);
+      return handleElevenLabsWebhook(request, env, ctx);
     }
     return json({ error: "Not found" }, 404);
   },
@@ -129,7 +129,7 @@ async function handleStartCall(request: Request, env: Env, ctx: Ctx): Promise<Re
 // POST /webhooks/elevenlabs  (post_call_transcription | call_initiation_failure)
 // ---------------------------------------------------------------------------
 
-async function handleElevenLabsWebhook(request: Request, env: Env): Promise<Response> {
+async function handleElevenLabsWebhook(request: Request, env: Env, ctx: Ctx): Promise<Response> {
   const raw = await request.text();
   const signature = request.headers.get("elevenlabs-signature") ?? "";
 
@@ -177,6 +177,12 @@ async function handleElevenLabsWebhook(request: Request, env: Env): Promise<Resp
           data?.metadata?.end_reason ??
           "completed",
       });
+      // Best-effort: pull the recording and hand it to Convex in the background
+      // so we still acknowledge the webhook promptly. The transcript/CRM result
+      // above is the primary outcome; a missing recording never blocks it.
+      if (recordingEnabled(env) && callId) {
+        ctx.waitUntil(saveRecording(env, leadId, callId));
+      }
     }
     return json({ ok: true });
   }
@@ -266,7 +272,7 @@ async function createElevenLabsCall(
     to_number: toNumber,
     conversation_initiation_client_data: { dynamic_variables: dynamicVariables },
   };
-  if (env.CALL_RECORDING_ENABLED === "true") payload.call_recording_enabled = true;
+  if (recordingEnabled(env)) payload.call_recording_enabled = true;
   const ringSecs = Number(env.RINGING_TIMEOUT_SECS);
   if (Number.isFinite(ringSecs) && ringSecs > 0) {
     payload.telephony_call_config = { ringing_timeout_secs: ringSecs };
@@ -294,6 +300,51 @@ async function createElevenLabsCall(
     throw new Error("ElevenLabs response missing conversation_id");
   }
   return String(callId);
+}
+
+/** Recording is on unless explicitly disabled. Requires call disclosure/consent. */
+function recordingEnabled(env: Env): boolean {
+  return env.CALL_RECORDING_ENABLED !== "false";
+}
+
+/**
+ * Pull the finished call audio from ElevenLabs and hand the bytes to Convex,
+ * which stores them in Convex file storage and links them to the run.
+ * Best-effort: any failure is swallowed so it never affects the CRM result.
+ */
+async function saveRecording(env: Env, leadId: string, callId: string): Promise<void> {
+  if (!env.ELEVENLABS_API_KEY) return;
+  const base = env.ELEVENLABS_API_BASE ?? DEFAULT_ELEVENLABS_BASE;
+  let audioRes: Response;
+  try {
+    audioRes = await fetchWithTimeout(
+      `${trimSlash(base)}/v1/convai/conversations/${encodeURIComponent(callId)}/audio`,
+      { headers: { "xi-api-key": env.ELEVENLABS_API_KEY } },
+      timeoutMs(env),
+    );
+  } catch {
+    return;
+  }
+  if (!audioRes.ok) return;
+
+  const contentType = audioRes.headers.get("content-type") ?? "audio/mpeg";
+  const audio = await audioRes.arrayBuffer();
+  const url =
+    `${trimSlash(env.CONVEX_SITE_URL)}/voice/recording` +
+    `?leadId=${encodeURIComponent(leadId)}&callId=${encodeURIComponent(callId)}`;
+  try {
+    await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": contentType, "X-Shared-Secret": env.VOICE_SHARED_SECRET },
+        body: audio,
+      },
+      timeoutMs(env),
+    );
+  } catch {
+    // best-effort — recording is secondary to the transcript/CRM result
+  }
 }
 
 /** Concise, agent-facing variables (contract §"ElevenLabs behavior"). */

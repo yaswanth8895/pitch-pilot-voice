@@ -68,14 +68,14 @@ try {
     const vars = sent?.conversation_initiation_client_data?.dynamic_variables || {};
     check("dynamic_variables carry lead_id for webhook recovery", vars.lead_id === "lead_synthetic_1");
     check("dynamic_variables include strategy + objections", Boolean(vars.strategy) && Boolean(vars.objections));
-    check("recording flag absent by default", sent.call_recording_enabled === undefined);
+    check("recording enabled by default", sent.call_recording_enabled === true);
   }
 
-  // Recording opt-in + ringing timeout pass through when set.
+  // Recording opt-out + ringing timeout.
   {
-    const res = await startCall("lead_synthetic_1", { CALL_RECORDING_ENABLED: "true", RINGING_TIMEOUT_SECS: "25" });
+    const res = await startCall("lead_synthetic_1", { CALL_RECORDING_ENABLED: "false", RINGING_TIMEOUT_SECS: "25" });
     const sent = mock.received.elevenCalls.at(-1) || {};
-    check("recording opt-in -> 202 and call_recording_enabled forwarded", res.status === 202 && sent.call_recording_enabled === true);
+    check("recording opt-out -> no call_recording_enabled", res.status === 202 && sent.call_recording_enabled === undefined);
     check("ringing_timeout_secs forwarded in telephony_call_config", sent.telephony_call_config?.ringing_timeout_secs === 25);
   }
 

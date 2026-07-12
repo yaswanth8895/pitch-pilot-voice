@@ -10,6 +10,8 @@
   },
   "vars": {
     // Flip to "true" only for the Stage-1 contract test (no real ElevenLabs call).
-    "FAKE_CALL": "false"
+    "FAKE_CALL": "false",
+    // Record calls and save them to Convex. Set "false" to disable (needs consent).
+    "CALL_RECORDING_ENABLED": "true"
   }
 }

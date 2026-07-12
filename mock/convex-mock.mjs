@@ -45,7 +45,7 @@ const FAIL_NUMBER = "+10000000000"; // fake ElevenLabs returns 400 for this
 const SLOW_NUMBER = "+15550000001"; // fake ElevenLabs delays for this
 
 export function startMock({ port = 8788, secret = "dev-shared-secret" } = {}) {
-  const received = { context: [], completed: [], failed: [], elevenCalls: [] };
+  const received = { context: [], completed: [], failed: [], elevenCalls: [], recordings: [] };
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://127.0.0.1:${port}`);
@@ -84,6 +84,32 @@ export function startMock({ port = 8788, secret = "dev-shared-secret" } = {}) {
         console.log(`[mock] ${url.pathname} <-`, JSON.stringify(payload));
         send(200, { accepted: true });
       });
+    }
+
+    // --- Convex: save recording (raw audio bytes) ---
+    if (req.method === "POST" && url.pathname === "/voice/recording") {
+      const chunks = [];
+      req.on("data", (chunk) => chunks.push(chunk));
+      req.on("end", () => {
+        if (badSecret) return send(401, { error: "invalid secret" });
+        const bytes = Buffer.concat(chunks);
+        received.recordings.push({
+          leadId: url.searchParams.get("leadId"),
+          callId: url.searchParams.get("callId"),
+          contentType: req.headers["content-type"],
+          bytes: bytes.length,
+        });
+        console.log(`[mock] /voice/recording <- ${bytes.length} bytes (lead ${url.searchParams.get("leadId")})`);
+        send(200, { accepted: true });
+      });
+      return;
+    }
+
+    // --- Fake ElevenLabs: conversation audio ---
+    if (req.method === "GET" && url.pathname.startsWith("/v1/convai/conversations/") && url.pathname.endsWith("/audio")) {
+      res.writeHead(200, { "content-type": "audio/mpeg" });
+      res.end(Buffer.from("FAKE_MP3_AUDIO_BYTES"));
+      return;
     }
 
     // --- Fake ElevenLabs outbound call ---

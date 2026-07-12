@@ -25,10 +25,25 @@ Convex startCall → POST /start-call { leadId }
          (dynamic_variables: lead_name, company, product_summary, strategy,
           objections, call_goal, lead_id)
   → ElevenLabs dials via Twilio, runs the agent (LLM = OpenAI via Custom LLM)
+         (call_recording_enabled: true by default)
+  → ElevenLabs dials via Twilio, runs the agent (LLM = OpenAI via Custom LLM)
   → call ends → post_call_transcription webhook → POST /webhooks/elevenlabs
   → POST {CONVEX_SITE_URL}/voice/completed
          { leadId, callId, transcript, transcriptProvider:"elevenlabs", endedReason }
+  → (background) GET /v1/convai/conversations/{callId}/audio
+  → POST {CONVEX_SITE_URL}/voice/recording?leadId=…&callId=…   (raw audio body)
 ```
+
+## Recordings
+
+Calls are recorded by default (`CALL_RECORDING_ENABLED=true`; set `"false"` to
+disable — recording needs disclosure/consent). After the transcript webhook, the
+Worker pulls the call audio from ElevenLabs and POSTs the raw bytes to Convex
+`POST /voice/recording?leadId=…&callId=…` (Content-Type `audio/mpeg`,
+`X-Shared-Secret`). **Convex (Agency side) stores it in Convex file storage and
+links it to the run** — see the recording section in `contracts/voice-api.md`.
+The audio fetch/upload runs in `ctx.waitUntil` so the webhook still acks fast, and
+it is best-effort: a missing recording never blocks the transcript/CRM result.
 
 ## Local development & tests (no cloud accounts needed)
 
