@@ -13,7 +13,7 @@ a **real** outbound call once credentials are in hand. Run all commands from the
 | `ELEVENLABS_AGENT_ID` | created in step 1 below |
 | `ELEVENLABS_WEBHOOK_SECRET` | created in step 4 below |
 | `CONVEX_SITE_URL` (`https://<deployment>.convex.site`) | **colleague** — their deployed Convex |
-| `VOICE_SHARED_SECRET` | shared value, **same in Worker and Convex**: `4c77984756648aef04ebeea4bb32425a56ece244a27b2b05eadfc09ea5dfa3a1` |
+| `VOICE_SHARED_SECRET` | generate with `openssl rand -hex 32`; **same value in Worker and Convex** (share out-of-band, never commit) |
 | A real, answerable lead in Convex (with a phone you can pick up) | **colleague** — seed lead |
 
 Pre-flight (confirm nothing is broken): `npm ci && npm test` → 49 checks pass.
@@ -74,7 +74,7 @@ Trigger it from the dashboard (their **Start Call** button), or directly:
 ```bash
 curl -i -X POST https://<worker-url>/start-call \
   -H 'Content-Type: application/json' \
-  -H 'X-Shared-Secret: 4c77984756648aef04ebeea4bb32425a56ece244a27b2b05eadfc09ea5dfa3a1' \
+  -H "X-Shared-Secret: $VOICE_SHARED_SECRET" \
   -d '{"leadId":"<real-convex-lead-id>"}'
 # → 202 {"accepted":true,"callId":"conv_…"}   and the phone rings
 ```
