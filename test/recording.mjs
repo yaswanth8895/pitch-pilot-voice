@@ -55,15 +55,15 @@ function check(name, condition) {
 try {
   console.log("Recording flow:");
 
-  // Recording ON (default): webhook -> pull audio -> save to Convex.
+  // Upload ENABLED: webhook -> pull audio -> save to Convex.
   {
     const pending = [];
     const ctx = { waitUntil: (p) => pending.push(p) };
-    const res = await worker.fetch(signed(transcriptEvent("conv_rec_1")), env, ctx);
+    const res = await worker.fetch(signed(transcriptEvent("conv_rec_1")), { ...env, RECORDING_UPLOAD_ENABLED: "true" }, ctx);
     check("webhook -> 200", res.status === 200);
     check("transcript forwarded to /voice/completed", mock.received.completed.length === 1);
     await Promise.all(pending); // let the background recording save finish
-    check("recording saved to Convex /voice/recording", mock.received.recordings.length === 1);
+    check("recording uploaded to Convex /voice/recording", mock.received.recordings.length === 1);
     const rec = mock.received.recordings[0] || {};
     check("recording carries leadId", rec.leadId === "lead_synthetic_1");
     check("recording carries callId", rec.callId === "conv_rec_1");
@@ -71,14 +71,14 @@ try {
     check("recording content-type is audio", String(rec.contentType).startsWith("audio/"));
   }
 
-  // Recording OFF: no audio saved.
+  // Upload DEFERRED (default, per contract): transcript still forwarded, no upload.
   {
     const pending = [];
     const ctx = { waitUntil: (p) => pending.push(p) };
     const before = mock.received.recordings.length;
-    await worker.fetch(signed(transcriptEvent("conv_rec_2")), { ...env, CALL_RECORDING_ENABLED: "false" }, ctx);
+    const res = await worker.fetch(signed(transcriptEvent("conv_rec_2")), env, ctx);
     await Promise.all(pending);
-    check("recording disabled -> nothing saved", mock.received.recordings.length === before);
+    check("upload deferred by default -> nothing uploaded", res.status === 200 && mock.received.recordings.length === before);
   }
 } finally {
   await mock.close();

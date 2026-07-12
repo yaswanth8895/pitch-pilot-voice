@@ -11,7 +11,10 @@
   "vars": {
     // Flip to "true" only for the Stage-1 contract test (no real ElevenLabs call).
     "FAKE_CALL": "false",
-    // Record calls and save them to Convex. Set "false" to disable (needs consent).
-    "CALL_RECORDING_ENABLED": "true"
+    // Record calls in ElevenLabs. Set "false" to disable (needs consent).
+    "CALL_RECORDING_ENABLED": "true",
+    // Upload recordings to Convex /voice/recording. Deferred per contract —
+    // flip to "true" once the Agency ships the /voice/recording endpoint.
+    "RECORDING_UPLOAD_ENABLED": "false"
   }
 }

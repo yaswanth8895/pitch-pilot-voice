@@ -30,6 +30,10 @@ export interface Env {
   REQUEST_TIMEOUT_MS?: string;
   // "true" → ask ElevenLabs to record the call (needs disclosure/consent).
   CALL_RECORDING_ENABLED?: string;
+  // "true" → upload the recording to Convex /voice/recording. Deferred by
+  // default per the contract ("Do not call /voice/recording") until Convex
+  // implements storage; the call is still recorded in ElevenLabs meanwhile.
+  RECORDING_UPLOAD_ENABLED?: string;
   // Seconds to ring before giving up (ElevenLabs default 60). Optional.
   RINGING_TIMEOUT_SECS?: string;
   // "true" → Stage-1 fake path (skip ElevenLabs, post a canned transcript).
@@ -180,7 +184,9 @@ async function handleElevenLabsWebhook(request: Request, env: Env, ctx: Ctx): Pr
       // Best-effort: pull the recording and hand it to Convex in the background
       // so we still acknowledge the webhook promptly. The transcript/CRM result
       // above is the primary outcome; a missing recording never blocks it.
-      if (recordingEnabled(env) && callId) {
+      // Deferred by default per contract — the call is still recorded in
+      // ElevenLabs; flip RECORDING_UPLOAD_ENABLED=true once Convex implements it.
+      if (env.RECORDING_UPLOAD_ENABLED === "true" && callId) {
         ctx.waitUntil(saveRecording(env, leadId, callId));
       }
     }
