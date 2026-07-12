@@ -37,9 +37,14 @@ Worker's `fetch` handler against an in-process mock of Convex.
 
 ```bash
 npm install
-npm test            # Stage-1 round-trip + Stage-2 webhook HMAC/flatten/forward
+npm test            # 37 checks: Stage-1 round-trip + Stage-2 webhook + Stage-3 hardening
 npm run typecheck   # tsc --noEmit against @cloudflare/workers-types
 ```
+
+`test/hardening.mjs` drives the **real (non-fake) call path** against a fake
+ElevenLabs (via `ELEVENLABS_API_BASE`) and covers provider failure (502),
+invalid phone (502), duplicate/active call relayed as 409, request timeout
+(502), routing (404), and webhook edge cases.
 
 Run the mock standalone and hit the Worker with `wrangler dev`:
 
@@ -103,7 +108,17 @@ no real values in Git.
 
 - **Stage 1 — contract round-trip (done, tested):** `/health`, `/start-call`
   validation, context fetch, fake transcript → `/voice/completed`.
-- **Stage 2 — real call:** wire ElevenLabs creds + the agent above; the webhook
-  path (HMAC verify, flatten, forward) is already implemented and tested.
-- **Stage 3 — hardening:** invalid number, provider failure, duplicate call,
-  second simultaneous call; record a fallback video.
+- **Stage 2 — real call (Worker side done, tested):** the outbound-call and
+  webhook paths (HMAC verify, flatten, forward) are implemented and covered
+  against a mock ElevenLabs. Remaining: plug in real ElevenLabs creds + the agent
+  above and make one live call to an approved number.
+- **Stage 3 — hardening (done, tested):** bounded timeouts on every outbound
+  call, phone validation, and coverage for provider failure, invalid number,
+  duplicate/second-simultaneous call (409), timeouts, routing, and webhook edge
+  cases. Remaining: record a fallback video of a real successful call.
+
+## Optional (non-secret) vars
+
+- `ELEVENLABS_API_BASE` — override the ElevenLabs API origin (tests point it at
+  the local mock). Defaults to `https://api.elevenlabs.io`.
+- `REQUEST_TIMEOUT_MS` — outbound request timeout in ms (default `12000`).

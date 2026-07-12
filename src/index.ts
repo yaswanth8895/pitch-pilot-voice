@@ -11,6 +11,7 @@
  *                                    final result (or failure) to Convex
  *
  * The Worker never decides CRM state — Convex + Hermes own that. It only relays.
+ * Every outbound network call has a bounded timeout and maps to a readable error.
  */
 
 export interface Env {
@@ -23,6 +24,10 @@ export interface Env {
   ELEVENLABS_AGENT_ID?: string;
   ELEVENLABS_PHONE_NUMBER_ID?: string;
   ELEVENLABS_WEBHOOK_SECRET?: string;
+  // Overridable for tests; defaults to the real ElevenLabs API.
+  ELEVENLABS_API_BASE?: string;
+  // Per-request outbound timeout in ms (default 12000).
+  REQUEST_TIMEOUT_MS?: string;
   // "true" → Stage-1 fake path (skip ElevenLabs, post a canned transcript).
   FAKE_CALL?: string;
 }
@@ -31,8 +36,8 @@ interface Ctx {
   waitUntil(promise: Promise<unknown>): void;
 }
 
-const ELEVENLABS_OUTBOUND_CALL_URL =
-  "https://api.elevenlabs.io/v1/convai/twilio/outbound-call";
+const DEFAULT_TIMEOUT_MS = 12_000;
+const DEFAULT_ELEVENLABS_BASE = "https://api.elevenlabs.io";
 
 export default {
   async fetch(request: Request, env: Env, ctx: Ctx): Promise<Response> {
@@ -88,8 +93,8 @@ async function handleStartCall(request: Request, env: Env, ctx: Ctx): Promise<Re
   }
 
   const phone = context.data.phone;
-  if (typeof phone !== "string" || phone.length === 0) {
-    return json({ accepted: false, error: "Lead has no phone number" }, 502);
+  if (!isLikelyE164(phone)) {
+    return json({ accepted: false, error: "Lead has a missing or invalid phone number" }, 502);
   }
   const dynamicVariables = toDynamicVariables(leadId, context.data);
 
@@ -109,7 +114,7 @@ async function handleStartCall(request: Request, env: Env, ctx: Ctx): Promise<Re
 
   // Stage 2: one real ElevenLabs outbound call over its native Twilio number.
   try {
-    const callId = await createElevenLabsCall(env, phone, dynamicVariables);
+    const callId = await createElevenLabsCall(env, phone as string, dynamicVariables);
     return json({ accepted: true, callId }, 202);
   } catch (err) {
     return json({ accepted: false, error: `ElevenLabs/Twilio rejected the request: ${errorMessage(err)}` }, 502);
@@ -203,8 +208,9 @@ async function fetchLeadContext(
   const url = `${trimSlash(env.CONVEX_SITE_URL)}/voice/context?leadId=${encodeURIComponent(leadId)}`;
   let res: Response;
   try {
-    res = await fetch(url, { headers: { "X-Shared-Secret": env.VOICE_SHARED_SECRET } });
-  } catch (err) {
+    res = await fetchWithTimeout(url, { headers: { "X-Shared-Secret": env.VOICE_SHARED_SECRET } }, timeoutMs(env));
+  } catch {
+    // Network error or timeout — treat as an upstream failure.
     return { ok: false, status: 502, data: null };
   }
   if (res.status !== 200) {
@@ -217,14 +223,18 @@ async function fetchLeadContext(
 async function forwardToConvex(env: Env, path: string, payload: unknown): Promise<boolean> {
   const url = `${trimSlash(env.CONVEX_SITE_URL)}${path}`;
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shared-Secret": env.VOICE_SHARED_SECRET,
+    const res = await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shared-Secret": env.VOICE_SHARED_SECRET,
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    });
+      timeoutMs(env),
+    );
     return res.ok;
   } catch {
     return false;
@@ -243,19 +253,24 @@ async function createElevenLabsCall(
   if (!env.ELEVENLABS_API_KEY || !env.ELEVENLABS_AGENT_ID || !env.ELEVENLABS_PHONE_NUMBER_ID) {
     throw new Error("ElevenLabs credentials are not configured");
   }
-  const res = await fetch(ELEVENLABS_OUTBOUND_CALL_URL, {
-    method: "POST",
-    headers: {
-      "xi-api-key": env.ELEVENLABS_API_KEY,
-      "Content-Type": "application/json",
+  const base = env.ELEVENLABS_API_BASE ?? DEFAULT_ELEVENLABS_BASE;
+  const res = await fetchWithTimeout(
+    `${trimSlash(base)}/v1/convai/twilio/outbound-call`,
+    {
+      method: "POST",
+      headers: {
+        "xi-api-key": env.ELEVENLABS_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        agent_id: env.ELEVENLABS_AGENT_ID,
+        agent_phone_number_id: env.ELEVENLABS_PHONE_NUMBER_ID,
+        to_number: toNumber,
+        conversation_initiation_client_data: { dynamic_variables: dynamicVariables },
+      }),
     },
-    body: JSON.stringify({
-      agent_id: env.ELEVENLABS_AGENT_ID,
-      agent_phone_number_id: env.ELEVENLABS_PHONE_NUMBER_ID,
-      to_number: toNumber,
-      conversation_initiation_client_data: { dynamic_variables: dynamicVariables },
-    }),
-  });
+    timeoutMs(env),
+  );
 
   const data: any = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -360,6 +375,26 @@ function timingSafeEqual(a: string, b: string): boolean {
 // Small utilities
 // ---------------------------------------------------------------------------
 
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function timeoutMs(env: Env): number {
+  const parsed = Number(env.REQUEST_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TIMEOUT_MS;
+}
+
+/** Loose E.164 check: '+' then 8–16 digits, first digit non-zero. */
+function isLikelyE164(phone: unknown): boolean {
+  return typeof phone === "string" && /^\+[1-9]\d{7,15}$/.test(phone);
+}
+
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -386,5 +421,8 @@ function buildFakeTranscript(vars: Record<string, string>): string {
 }
 
 function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  if (err instanceof Error) {
+    return err.name === "AbortError" ? "request timed out" : err.message;
+  }
+  return String(err);
 }

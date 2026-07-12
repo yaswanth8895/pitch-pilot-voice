@@ -12,9 +12,10 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "mock": "node mock/convex-mock.mjs",
-    "test": "node test/roundtrip.mjs && node test/webhook.mjs",
+    "test": "node test/roundtrip.mjs && node test/webhook.mjs && node test/hardening.mjs",
     "test:roundtrip": "node test/roundtrip.mjs",
-    "test:webhook": "node test/webhook.mjs"
+    "test:webhook": "node test/webhook.mjs",
+    "test:hardening": "node test/hardening.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260708.1",
